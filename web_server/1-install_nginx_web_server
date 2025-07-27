@@ -7,22 +7,53 @@ apt-get update -y
 # Install nginx
 apt-get install nginx -y
 
-# Create custom index.html with required content
+# Stop nginx if it's running to make configuration changes
+service nginx stop
+
+# Create the custom index.html with required content
 echo "Holberton School for the win!" > /var/www/html/index.html
 
-# Ensure nginx is configured to listen on port 80 (default configuration should work)
-# But let's make sure by checking the default site configuration
-if ! grep -q "listen 80" /etc/nginx/sites-available/default; then
-    # If port 80 is not configured, add it
-    sed -i 's/listen \[::\]:80 default_server;/listen 80 default_server;\n\tlisten [::]:80 default_server;/' /etc/nginx/sites-available/default
-fi
+# Set proper permissions
+chown www-data:www-data /var/www/html/index.html
+chmod 644 /var/www/html/index.html
 
-# Start nginx service (using service command instead of systemctl)
+# Ensure default nginx configuration is correct
+cat > /etc/nginx/sites-available/default << 'EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/html;
+    index index.html index.htm index.nginx-debian.html;
+
+    server_name _;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+EOF
+
+# Remove any potential conflicting configurations
+rm -f /etc/nginx/sites-enabled/default
+ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+# Test nginx configuration
+nginx -t
+
+# Start nginx service
 service nginx start
 
 # Enable nginx to start on boot
-update-rc.d nginx enable
+if command -v update-rc.d > /dev/null; then
+    update-rc.d nginx enable
+elif command -v chkconfig > /dev/null; then
+    chkconfig nginx on
+fi
 
-# Restart nginx to ensure configuration is loaded (using service command)
-service nginx restart
+# Force reload nginx configuration
+service nginx reload
+
+# Ensure nginx is running
+service nginx status
 
